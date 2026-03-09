@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 
 interface PinEntryProps {
   onSuccess: (pin: string) => void;
@@ -11,59 +12,58 @@ export default function PinEntry({ onSuccess }: PinEntryProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError('');
+  async function handleSubmit() {
+    if (!pin.trim()) return;
     setLoading(true);
-
+    setError('');
     try {
-      const formData = new FormData();
-      formData.append('pin', pin);
-
-      const response = await fetch('/api/upload', {
+      const res = await fetch('/api/upload', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin, volunteerName: '', caption: '', files: [] }),
       });
-
-      if (response.status === 401) {
-        setError('Invalid PIN');
-        setLoading(false);
-        return;
+      if (res.status === 401) {
+        setError('Incorrect PIN. Please try again.');
+      } else {
+        onSuccess(pin);
       }
-
-      // A 400 means PIN was valid but files are missing — that's expected
-      onSuccess(pin);
     } catch {
-      setError('Something went wrong. Please try again.');
+      setError('Connection error. Please try again.');
+    } finally {
       setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
-      <label htmlFor="pin" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        Enter PIN to continue
-      </label>
-      <input
-        id="pin"
-        type="password"
-        inputMode="numeric"
-        value={pin}
-        onChange={(e) => setPin(e.target.value)}
-        placeholder="Enter PIN"
-        className="rounded-lg border border-zinc-300 px-4 py-3 text-center text-lg tracking-widest focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
-        disabled={loading}
-      />
-      {error && (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-      )}
-      <button
-        type="submit"
-        disabled={loading || pin.length === 0}
-        className="rounded-lg bg-blue-600 px-4 py-3 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {loading ? 'Verifying...' : 'Submit'}
-      </button>
-    </form>
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Logo header */}
+      <div className="bg-slate-100 rounded-b-3xl px-6 pt-10 pb-8 flex flex-col items-center">
+        <Image src="/tpc-logo.png" alt="TPC Logo" width={180} height={80} className="mb-4" priority />
+        <h1 className="text-xl font-bold text-slate-700 text-center">Volunteer Photo & Video Submission</h1>
+      </div>
+
+      {/* PIN form */}
+      <div className="flex-1 px-6 pt-10">
+        <p className="text-slate-600 text-base mb-6 text-center">Enter the upload PIN to continue.</p>
+        <input
+          type="password"
+          inputMode="numeric"
+          value={pin}
+          onChange={(e) => { setPin(e.target.value); setError(''); }}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+          placeholder="Enter PIN"
+          className="w-full border-2 border-slate-200 rounded-2xl px-5 py-4 text-2xl text-center tracking-widest focus:outline-none focus:border-slate-400 mb-4"
+          autoFocus
+        />
+        {error && <p className="text-red-500 text-sm text-center mb-4">{error}</p>}
+        <button
+          onClick={handleSubmit}
+          disabled={loading || !pin.trim()}
+          className="w-full bg-slate-800 text-white text-lg font-semibold py-4 rounded-2xl disabled:opacity-40 active:bg-slate-700 transition-colors"
+        >
+          {loading ? 'Checking...' : 'Continue'}
+        </button>
+      </div>
+    </div>
   );
 }
