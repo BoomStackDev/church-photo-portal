@@ -1,81 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPin } from '@/lib/auth';
 import { formatFilename } from '@/lib/format-filename';
-import { uploadFileToOneDrive } from '@/lib/onedrive';
-import { UploadResult } from '@/types';
+import { createUploadSession } from '@/lib/onedrive';
+import { UploadSessionRequest, UploadSessionResponse, UploadSession } from '@/types';
 
-export async function POST(request: NextRequest): Promise<NextResponse<UploadResult>> {
-  const formData = await request.formData();
+export async function POST(
+  request: NextRequest
+): Promise<NextResponse<UploadSessionResponse>> {
+  const body: UploadSessionRequest = await request.json();
 
-  const pin = formData.get('pin');
-  const volunteerName = formData.get('volunteerName');
-  const caption = formData.get('caption');
-  const files = formData.getAll('files');
+  const { pin, volunteerName, caption, files } = body;
 
   // Verify PIN server-side
-  if (typeof pin !== 'string' || !verifyPin(pin)) {
+  if (!pin || !verifyPin(pin)) {
     return NextResponse.json(
-      { success: false, uploadedFiles: [], failedFiles: [], error: 'Invalid PIN' },
+      { success: false, sessions: [], error: 'Invalid PIN' },
       { status: 401 }
     );
   }
 
   // Validate name and caption
   if (
-    typeof volunteerName !== 'string' ||
-    typeof caption !== 'string' ||
+    !volunteerName ||
+    !caption ||
     volunteerName.trim() === '' ||
     caption.trim() === ''
   ) {
     return NextResponse.json(
-      { success: false, uploadedFiles: [], failedFiles: [], error: 'Name and caption are required' },
+      { success: false, sessions: [], error: 'Name and caption are required' },
       { status: 400 }
     );
   }
 
-  // Validate at least one file
-  const fileEntries = files.filter((f): f is File => f instanceof File);
-  if (fileEntries.length === 0) {
+  // Validate files array
+  if (!files || !Array.isArray(files) || files.length === 0) {
     return NextResponse.json(
-      { success: false, uploadedFiles: [], failedFiles: [], error: 'At least one file is required' },
+      { success: false, sessions: [], error: 'At least one file is required' },
       { status: 400 }
     );
   }
 
-  const uploadedFiles: string[] = [];
-  const failedFiles: string[] = [];
+  // Create upload sessions for each file
+  const sessions: UploadSession[] = [];
 
-  for (const file of fileEntries) {
+  for (const file of files) {
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const mimeType = file.type;
       const filename = formatFilename(volunteerName, caption, file.name);
-
-      await uploadFileToOneDrive(filename, buffer, mimeType);
-      uploadedFiles.push(filename);
-    } catch {
-      failedFiles.push(file.name);
+      const uploadUrl = await createUploadSession(
+        filename,
+        file.size,
+        file.mimeType
+      );
+      sessions.push({
+        filename,
+        uploadUrl,
+        mimeType: file.mimeType,
+        size: file.size,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to create upload session';
+      return NextResponse.json(
+        { success: false, sessions: [], error: message },
+        { status: 500 }
+      );
     }
   }
 
-  // Determine status code
-  if (uploadedFiles.length === 0) {
-    return NextResponse.json(
-      { success: false, uploadedFiles, failedFiles, error: 'All files failed to upload' },
-      { status: 500 }
-    );
-  }
-
-  if (failedFiles.length > 0) {
-    return NextResponse.json(
-      { success: true, uploadedFiles, failedFiles },
-      { status: 207 }
-    );
-  }
-
   return NextResponse.json(
-    { success: true, uploadedFiles, failedFiles },
+    { success: true, sessions },
     { status: 200 }
   );
 }

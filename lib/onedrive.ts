@@ -31,11 +31,11 @@ export async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-export async function uploadFileToOneDrive(
+export async function createUploadSession(
   filename: string,
-  fileBuffer: Buffer,
+  fileSize: number,
   mimeType: string
-): Promise<void> {
+): Promise<string> {
   const userId = process.env.ONEDRIVE_USER_ID;
   const folderPath = process.env.ONEDRIVE_FOLDER_PATH;
 
@@ -45,19 +45,27 @@ export async function uploadFileToOneDrive(
 
   const accessToken = await getAccessToken();
 
-  const uploadUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/root:/${folderPath}/${filename}:/content`;
+  const sessionUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/root:/${folderPath}/${filename}:/createUploadSession`;
 
-  const response = await fetch(uploadUrl, {
-    method: 'PUT',
+  const response = await fetch(sessionUrl, {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'Content-Type': mimeType,
+      'Content-Type': 'application/json',
     },
-    body: new Uint8Array(fileBuffer),
+    body: JSON.stringify({
+      item: {
+        '@microsoft.graph.conflictBehavior': 'rename',
+        name: filename,
+      },
+    }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Failed to upload ${filename}: ${error}`);
+    throw new Error(`Failed to create upload session for ${filename}: ${error}`);
   }
+
+  const data = await response.json();
+  return data.uploadUrl;
 }
