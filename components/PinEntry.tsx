@@ -63,6 +63,12 @@ export default function PinEntry({ onSuccess }: PinEntryProps) {
         >
           {loading ? 'Checking...' : 'Continue'}
         </button>
+        <a
+          href="/admin"
+          className="block w-full border-2 border-slate-200 text-slate-500 text-lg font-semibold py-4 rounded-2xl text-center active:bg-slate-50 transition-colors mt-1"
+        >
+          Admin
+        </a>
       </div>
     </div>
   );
