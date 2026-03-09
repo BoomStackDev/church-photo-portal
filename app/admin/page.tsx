@@ -24,6 +24,21 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<OneDriveFile | null>(null);
 
+  // Select mode state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Delete dialog state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  // Move dialog state
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [moveFolder, setMoveFolder] = useState('');
+  const [moveLoading, setMoveLoading] = useState(false);
+  const [moveError, setMoveError] = useState('');
+
   useEffect(() => {
     if (session?.accessToken) {
       fetchFiles();
@@ -67,6 +82,87 @@ export default function AdminPage() {
     return file.file?.mimeType?.startsWith('video/') ?? false;
   }
 
+  function toggleSelect(fileId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function handleFileTap(file: OneDriveFile) {
+    if (selectMode) {
+      toggleSelect(file.id);
+    } else {
+      setLightbox(file);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      const res = await fetch('/api/auth/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileIds: Array.from(selectedIds) }),
+      });
+      const data: { success: boolean; error?: string } = await res.json();
+      if (!data.success) {
+        setDeleteError(data.error ?? 'Delete failed.');
+        return;
+      }
+      setFiles((prev) => prev.filter((f) => !selectedIds.has(f.id)));
+      setShowDeleteDialog(false);
+      exitSelectMode();
+    } catch {
+      setDeleteError('Network error. Please try again.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
+  async function handleMove() {
+    if (!moveFolder.trim()) {
+      setMoveError('Please enter a folder name.');
+      return;
+    }
+    setMoveLoading(true);
+    setMoveError('');
+    try {
+      const res = await fetch('/api/auth/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileIds: Array.from(selectedIds),
+          destinationFolder: moveFolder.trim(),
+        }),
+      });
+      const data: { success: boolean; error?: string } = await res.json();
+      if (!data.success) {
+        setMoveError(data.error ?? 'Move failed.');
+        return;
+      }
+      setFiles((prev) => prev.filter((f) => !selectedIds.has(f.id)));
+      setShowMoveDialog(false);
+      setMoveFolder('');
+      exitSelectMode();
+    } catch {
+      setMoveError('Network error. Please try again.');
+    } finally {
+      setMoveLoading(false);
+    }
+  }
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -104,16 +200,24 @@ export default function AdminPage() {
           <Image src="/tpc-logo.png" alt="TPC Logo" width={80} height={36} />
           <span className="text-slate-700 font-semibold text-sm">Admin Gallery</span>
         </div>
-        <button
-          onClick={() => signOut()}
-          className="text-sm text-slate-500 border border-slate-200 px-3 py-1.5 rounded-lg active:bg-slate-50"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            className="text-sm text-slate-500 border border-slate-200 px-3 py-1.5 rounded-lg active:bg-slate-50"
+          >
+            {selectMode ? 'Cancel' : 'Select'}
+          </button>
+          <button
+            onClick={() => signOut()}
+            className="text-sm text-slate-500 border border-slate-200 px-3 py-1.5 rounded-lg active:bg-slate-50"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
 
       {/* Content */}
-      <div className="px-4 py-6 max-w-2xl mx-auto">
+      <div className="px-4 py-6 max-w-2xl mx-auto pb-24">
         {loading && (
           <div className="flex items-center justify-center py-20">
             <p className="text-slate-400">Loading submissions...</p>
@@ -142,7 +246,7 @@ export default function AdminPage() {
               {grouped[date].map((file) => (
                 <div
                   key={file.id}
-                  onClick={() => setLightbox(file)}
+                  onClick={() => handleFileTap(file)}
                   className="relative aspect-square rounded-2xl overflow-hidden bg-slate-100 cursor-pointer active:scale-95 transition-transform"
                 >
                   {isImage(file) && file['@microsoft.graph.downloadUrl'] && (
@@ -165,12 +269,124 @@ export default function AdminPage() {
                       <span className="text-slate-400 text-xs text-center px-2">{file.name}</span>
                     </div>
                   )}
+
+                  {/* Selection overlay */}
+                  {selectMode && (
+                    <div className="absolute top-2 right-2">
+                      {selectedIds.has(file.id) ? (
+                        <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      ) : (
+                        <div className="w-7 h-7 rounded-full border-2 border-white border-opacity-60 bg-black bg-opacity-20" />
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
         ))}
       </div>
+
+      {/* Bottom action bar */}
+      {selectMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-slate-200 px-4 py-3 pb-safe flex items-center justify-between"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <span className="text-sm font-medium text-slate-600">
+            {selectedIds.size} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setMoveError(''); setMoveFolder(''); setShowMoveDialog(true); }}
+              className="text-sm font-semibold text-slate-700 border border-slate-200 px-4 py-2 rounded-lg active:bg-slate-50"
+            >
+              Move
+            </button>
+            <button
+              onClick={() => { setDeleteError(''); setShowDeleteDialog(true); }}
+              className="text-sm font-semibold text-red-600 border border-red-200 px-4 py-2 rounded-lg active:bg-red-50"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center px-6">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">
+              Delete {selectedIds.size} file{selectedIds.size !== 1 ? 's' : ''}?
+            </h3>
+            <p className="text-slate-500 text-sm mb-4">This cannot be undone.</p>
+            {deleteError && (
+              <p className="text-red-500 text-sm mb-4">{deleteError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteDialog(false)}
+                disabled={deleteLoading}
+                className="flex-1 text-sm font-semibold text-slate-600 border border-slate-200 py-3 rounded-xl active:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteLoading}
+                className="flex-1 text-sm font-semibold text-white bg-red-600 py-3 rounded-xl active:bg-red-700 disabled:opacity-50"
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move dialog */}
+      {showMoveDialog && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center px-6">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">
+              Move {selectedIds.size} file{selectedIds.size !== 1 ? 's' : ''}
+            </h3>
+            <p className="text-slate-500 text-xs mb-4">
+              Files will be moved to a subfolder inside Church Photo Submissions
+            </p>
+            <input
+              type="text"
+              value={moveFolder}
+              onChange={(e) => setMoveFolder(e.target.value)}
+              placeholder="Folder name"
+              className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-slate-400 mb-3"
+              autoFocus
+            />
+            {moveError && (
+              <p className="text-red-500 text-sm mb-3">{moveError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowMoveDialog(false)}
+                disabled={moveLoading}
+                className="flex-1 text-sm font-semibold text-slate-600 border border-slate-200 py-3 rounded-xl active:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMove}
+                disabled={moveLoading}
+                className="flex-1 text-sm font-semibold text-white bg-slate-800 py-3 rounded-xl active:bg-slate-700 disabled:opacity-50"
+              >
+                {moveLoading ? 'Moving...' : 'Move'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox */}
       {lightbox && (
