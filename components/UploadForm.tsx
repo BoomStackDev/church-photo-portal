@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import type { UploadSession, UploadSessionResponse } from '@/types';
 
 interface UploadFormProps {
   pin: string;
@@ -8,21 +9,66 @@ interface UploadFormProps {
   onError: (message: string) => void;
 }
 
+interface FileProgress {
+  name: string;
+  progress: number;
+  status: 'pending' | 'uploading' | 'done' | 'error';
+}
+
+const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
+
+async function uploadFileInChunks(
+  file: File,
+  session: UploadSession,
+  onProgress: (percent: number) => void
+): Promise<void> {
+  const totalSize = file.size;
+  let offset = 0;
+
+  while (offset < totalSize) {
+    const chunk = file.slice(offset, offset + CHUNK_SIZE);
+    const chunkSize = chunk.size;
+    const contentRange = `bytes ${offset}-${offset + chunkSize - 1}/${totalSize}`;
+
+    const response = await fetch(session.uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Length': chunkSize.toString(),
+        'Content-Range': contentRange,
+      },
+      body: chunk,
+    });
+
+    if (!response.ok && response.status !== 202) {
+      const error = await response.text();
+      throw new Error(`Chunk upload failed: ${error}`);
+    }
+
+    offset += chunkSize;
+    const percent = Math.round((offset / totalSize) * 100);
+    onProgress(Math.min(percent, 100));
+  }
+}
+
 export default function UploadForm({ pin, onSuccess, onError }: UploadFormProps) {
   const [volunteerName, setVolunteerName] = useState('');
   const [caption, setCaption] = useState('');
   const [files, setFiles] = useState<FileList | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fileProgress, setFileProgress] = useState<FileProgress[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function updateProgress(index: number, progress: number, status: FileProgress['status']) {
+    setFileProgress(prev =>
+      prev.map((f, i) => (i === index ? { ...f, progress, status } : f))
+    );
+  }
 
-    if (volunteerName.trim() === '' || caption.trim() === '') {
-      onError('Name and caption are required.');
+  async function handleSubmit() {
+    if (!volunteerName.trim() || !caption.trim()) {
+      onError('Please enter your name and a caption.');
       return;
     }
-
     if (!files || files.length === 0) {
       onError('Please select at least one file.');
       return;
@@ -30,91 +76,144 @@ export default function UploadForm({ pin, onSuccess, onError }: UploadFormProps)
 
     setLoading(true);
 
+    const fileArray = Array.from(files);
+    setFileProgress(
+      fileArray.map(f => ({ name: f.name, progress: 0, status: 'pending' }))
+    );
+
+    // Step 1 — get upload session URLs from Vercel
+    let sessions: UploadSession[];
     try {
-      const formData = new FormData();
-      formData.append('pin', pin);
-      formData.append('volunteerName', volunteerName);
-      formData.append('caption', caption);
-
-      for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
-      }
-
-      const response = await fetch('/api/upload', {
+      const res = await fetch('/api/upload', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin,
+          volunteerName,
+          caption,
+          files: fileArray.map(f => ({
+            name: f.name,
+            mimeType: f.type,
+            size: f.size,
+          })),
+        }),
       });
 
-      const result: { success: boolean; uploadedFiles: string[]; failedFiles: string[]; error?: string } =
-        await response.json();
+      const data: UploadSessionResponse = await res.json();
 
-      if (!result.success && result.error) {
-        onError(result.error);
-      } else {
-        onSuccess({ uploadedFiles: result.uploadedFiles, failedFiles: result.failedFiles });
+      if (!data.success || !data.sessions) {
+        onError(data.error ?? 'Failed to prepare upload. Please try again.');
+        setLoading(false);
+        return;
       }
+
+      sessions = data.sessions;
     } catch {
-      onError('Upload failed. Please check your connection and try again.');
-    } finally {
+      onError('Network error. Please check your connection and try again.');
       setLoading(false);
+      return;
+    }
+
+    // Step 2 — upload each file directly to OneDrive in chunks
+    const uploadedFiles: string[] = [];
+    const failedFiles: string[] = [];
+
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      const session = sessions[i];
+
+      updateProgress(i, 0, 'uploading');
+
+      try {
+        await uploadFileInChunks(file, session, (percent) => {
+          updateProgress(i, percent, 'uploading');
+        });
+        updateProgress(i, 100, 'done');
+        uploadedFiles.push(session.filename);
+      } catch {
+        updateProgress(i, 0, 'error');
+        failedFiles.push(file.name);
+      }
+    }
+
+    setLoading(false);
+
+    if (uploadedFiles.length > 0) {
+      onSuccess({ uploadedFiles, failedFiles });
+    } else {
+      onError('All files failed to upload. Please try again.');
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-lg flex-col gap-5">
+    <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <label htmlFor="volunteerName" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Your Name
-        </label>
+        <label className="text-sm font-medium text-zinc-700">Your Name</label>
         <input
-          id="volunteerName"
           type="text"
           value={volunteerName}
-          onChange={(e) => setVolunteerName(e.target.value)}
+          onChange={e => setVolunteerName(e.target.value)}
           placeholder="Enter your name"
-          className="rounded-lg border border-zinc-300 px-4 py-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
           disabled={loading}
+          className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <label htmlFor="caption" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Caption
-        </label>
+        <label className="text-sm font-medium text-zinc-700">Caption</label>
         <input
-          id="caption"
           type="text"
           value={caption}
-          onChange={(e) => setCaption(e.target.value)}
-          placeholder="Describe the photo or event"
-          className="rounded-lg border border-zinc-300 px-4 py-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+          onChange={e => setCaption(e.target.value)}
+          placeholder="Describe what's in the photo or video"
           disabled={loading}
+          className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <label htmlFor="files" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Photos & Videos
-        </label>
+        <label className="text-sm font-medium text-zinc-700">Photos & Videos</label>
         <input
-          id="files"
           ref={fileInputRef}
           type="file"
           multiple
           accept="image/*,video/*"
-          onChange={(e) => setFiles(e.target.files)}
-          className="rounded-lg border border-zinc-300 px-4 py-3 text-base file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-blue-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:file:bg-zinc-700 dark:file:text-zinc-200"
+          onChange={e => setFiles(e.target.files)}
           disabled={loading}
+          className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-base disabled:opacity-50"
         />
       </div>
 
+      {fileProgress.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {fileProgress.map((f, i) => (
+            <div key={i} className="flex flex-col gap-1">
+              <div className="flex justify-between text-sm">
+                <span className="truncate text-zinc-600">{f.name}</span>
+                <span className="ml-2 shrink-0 text-zinc-500">
+                  {f.status === 'done' ? '✓ Done' : f.status === 'error' ? '✗ Failed' : `${f.progress}%`}
+                </span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-zinc-200">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    f.status === 'error' ? 'bg-red-500' : f.status === 'done' ? 'bg-green-500' : 'bg-blue-500'
+                  }`}
+                  style={{ width: `${f.progress}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <button
-        type="submit"
-        disabled={loading}
-        className="mt-2 rounded-lg bg-blue-600 px-6 py-4 text-lg font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={handleSubmit}
+        disabled={loading || !files || files.length === 0}
+        className="w-full rounded-lg bg-blue-600 px-4 py-4 text-lg font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
       >
-        {loading ? 'Uploading your photos...' : 'Upload'}
+        {loading ? 'Uploading...' : 'Submit Photos & Videos'}
       </button>
-    </form>
+    </div>
   );
 }
