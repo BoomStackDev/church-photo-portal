@@ -40,6 +40,29 @@ export async function POST(
     );
   }
 
+  // Validate file types
+  const allowedTypes = [
+    'image/jpeg',
+    'image/heic',
+    'image/heic-sequence',
+    'image/png',
+    'video/mp4',
+    'video/quicktime',
+  ];
+
+  for (const file of files) {
+    if (!allowedTypes.includes(file.mimeType)) {
+      return NextResponse.json(
+        {
+          success: false,
+          sessions: [],
+          error: 'File type not allowed. Please upload JPG, HEIC, PNG, MP4, or MOV files only.',
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   // Create upload sessions for each file
   const sessions: UploadSession[] = [];
 

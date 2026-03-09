@@ -58,7 +58,7 @@ export default function Home() {
           priority
         />
         <h1 className="text-center text-2xl font-bold text-slate-700 dark:text-white">
-          Volunteer Photo Submission
+          Volunteer Photo & Video Submission
         </h1>
       </header>
 

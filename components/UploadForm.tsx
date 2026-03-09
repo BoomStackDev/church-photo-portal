@@ -172,12 +172,12 @@ export default function UploadForm({ pin, onSuccess, onError }: UploadFormProps)
       </div>
 
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-zinc-700">Photos & Videos</label>
+        <label className="text-sm font-medium text-zinc-700">Photos & Videos (.jpg, .heic, .png, .mp4, .mov)</label>
         <input
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/*,video/*"
+          accept=".jpg,.jpeg,.heic,.png,.mp4,.mov"
           onChange={e => setFiles(e.target.files)}
           disabled={loading}
           className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-base disabled:opacity-50"
