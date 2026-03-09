@@ -57,7 +57,7 @@ export default function Home() {
           style={{ objectFit: 'contain' }}
           priority
         />
-        <h1 className="text-center text-3xl font-bold text-zinc-900 dark:text-white">
+        <h1 className="text-center text-2xl font-bold text-slate-700 dark:text-white">
           Volunteer Photo Submission
         </h1>
       </header>
