@@ -121,9 +121,9 @@ export default function UploadForm({ pin, onSuccess, onError }: UploadFormProps)
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Logo header */}
-      <div className="bg-slate-100 rounded-b-3xl px-6 pt-10 pb-8 flex flex-col items-center">
+      <div className="bg-slate-800 rounded-b-3xl px-6 pt-10 pb-8 flex flex-col items-center">
         <img src="/tpc-logo.png" alt="TPC Logo" className="h-16 w-auto mb-4" />
-        <h1 className="text-xl font-bold text-slate-700 text-center">Volunteer Photo & Video Submission</h1>
+        <h1 className="text-xl font-bold text-white text-center">Volunteer Photo & Video Submission</h1>
       </div>
 
       {/* Form */}
@@ -131,42 +131,42 @@ export default function UploadForm({ pin, onSuccess, onError }: UploadFormProps)
 
         {/* Name */}
         <div>
-          <label className="block text-sm font-semibold text-slate-600 mb-2">Your Name</label>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">Your Name</label>
           <input
             type="text"
             value={volunteerName}
             onChange={(e) => setVolunteerName(e.target.value)}
             placeholder="e.g. Jane Smith"
             autoComplete="name"
-            className="w-full border-2 border-slate-200 rounded-2xl px-5 py-4 text-base focus:outline-none focus:border-slate-400"
+            className="w-full border-2 border-slate-300 rounded-2xl px-5 py-4 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
           />
         </div>
 
         {/* Caption */}
         <div>
-          <label className="block text-sm font-semibold text-slate-600 mb-2">Caption</label>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">Caption</label>
           <textarea
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
             placeholder="What is happening in these photos?"
             rows={3}
-            className="w-full border-2 border-slate-200 rounded-2xl px-5 py-4 text-base focus:outline-none focus:border-slate-400 resize-none"
+            className="w-full border-2 border-slate-300 rounded-2xl px-5 py-4 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 resize-none"
           />
         </div>
 
         {/* File picker */}
         <div>
-          <label className="block text-sm font-semibold text-slate-600 mb-2">Photos & Videos</label>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">Photos & Videos</label>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-full border-2 border-dashed border-slate-300 rounded-2xl py-6 flex flex-col items-center gap-2 active:bg-slate-50 transition-colors"
+            className="w-full border-2 border-dashed border-slate-400 rounded-2xl py-6 flex flex-col items-center gap-2 active:bg-slate-50 transition-colors"
           >
-            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16v-8m-4 4h8M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span className="text-slate-500 text-sm font-medium">Tap to add photos or videos</span>
-            <span className="text-slate-400 text-xs">JPG, PNG, HEIC, MP4, MOV</span>
+            <span className="text-slate-600 text-sm font-medium">Tap to add photos or videos</span>
+            <span className="text-slate-500 text-xs">JPG, PNG, HEIC, MP4, MOV</span>
           </button>
           <input
             ref={fileInputRef}
