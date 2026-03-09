@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import PinEntry from '@/components/PinEntry';
 import UploadForm from '@/components/UploadForm';
 import SuccessMessage from '@/components/SuccessMessage';
@@ -46,14 +47,22 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-zinc-50 px-4 py-12 dark:bg-zinc-900">
-      <header className="mb-10">
+    <div className="flex min-h-screen flex-col items-center bg-white px-4 py-12 dark:bg-zinc-900">
+      <header className="mx-auto mb-10 flex w-full max-w-lg flex-col items-center gap-4 rounded-xl bg-slate-100 p-6">
+        <Image
+          src="/tpc-logo.png"
+          alt="Turning Point Church"
+          width={180}
+          height={80}
+          style={{ objectFit: 'contain' }}
+          priority
+        />
         <h1 className="text-center text-3xl font-bold text-zinc-900 dark:text-white">
           Volunteer Photo Submission
         </h1>
       </header>
 
-      <main className="flex w-full flex-col items-center">
+      <main className="mx-auto flex w-full max-w-lg flex-col items-center">
         {view === 'pin' && <PinEntry onSuccess={handlePinSuccess} />}
         {view === 'upload' && (
           <UploadForm
