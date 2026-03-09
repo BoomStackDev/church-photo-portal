@@ -65,6 +65,46 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Destination folder is required' }, { status: 400 });
   }
 
+  const trimmedFolder = destinationFolder.trim();
+
+  // Check if destination folder exists
+  const checkUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/root:/${folderPath}/${trimmedFolder}`;
+  const checkRes = await fetch(checkUrl, {
+    headers: { Authorization: `Bearer ${session.accessToken}` },
+  });
+
+  // Create folder if it doesn't exist
+  if (checkRes.status === 404) {
+    const createUrl = `https://graph.microsoft.com/v1.0/users/${userId}/drive/root:/${folderPath}:/children`;
+    const createRes = await fetch(createUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: trimmedFolder,
+        folder: {},
+        '@microsoft.graph.conflictBehavior': 'rename',
+      }),
+    });
+
+    if (!createRes.ok) {
+      const error = await createRes.text();
+      return NextResponse.json(
+        { success: false, error: `Failed to create folder: ${error}` },
+        { status: createRes.status }
+      );
+    }
+  } else if (!checkRes.ok) {
+    const error = await checkRes.text();
+    return NextResponse.json(
+      { success: false, error: `Failed to check folder: ${error}` },
+      { status: checkRes.status }
+    );
+  }
+
+  // Move each file
   let moved = 0;
 
   for (const fileId of fileIds) {
@@ -77,7 +117,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         parentReference: {
-          path: `/drive/root:/${folderPath}/${destinationFolder.trim()}`,
+          path: `/drive/root:/${folderPath}/${trimmedFolder}`,
         },
       }),
     });

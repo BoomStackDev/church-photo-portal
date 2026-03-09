@@ -38,6 +38,8 @@ export default function AdminPage() {
   const [moveFolder, setMoveFolder] = useState('');
   const [moveLoading, setMoveLoading] = useState(false);
   const [moveError, setMoveError] = useState('');
+  const [existingFolders, setExistingFolders] = useState<string[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
 
   useEffect(() => {
     if (session?.accessToken) {
@@ -129,6 +131,30 @@ export default function AdminPage() {
     } finally {
       setDeleteLoading(false);
     }
+  }
+
+  async function fetchFolders() {
+    setFoldersLoading(true);
+    try {
+      const res = await fetch('/api/auth/folders');
+      if (res.ok) {
+        const data: { success: boolean; folders: string[] } = await res.json();
+        if (data.success) {
+          setExistingFolders(data.folders);
+        }
+      }
+    } catch {
+      // Silently fail — folder chips are optional
+    } finally {
+      setFoldersLoading(false);
+    }
+  }
+
+  function openMoveDialog() {
+    setMoveError('');
+    setMoveFolder('');
+    setShowMoveDialog(true);
+    fetchFolders();
   }
 
   async function handleMove() {
@@ -301,7 +327,7 @@ export default function AdminPage() {
           </span>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setMoveError(''); setMoveFolder(''); setShowMoveDialog(true); }}
+              onClick={openMoveDialog}
               className="text-sm font-semibold text-slate-700 border border-slate-200 px-4 py-2 rounded-lg active:bg-slate-50"
             >
               Move
@@ -354,9 +380,29 @@ export default function AdminPage() {
             <h3 className="text-lg font-bold text-slate-800 mb-2">
               Move {selectedIds.size} file{selectedIds.size !== 1 ? 's' : ''}
             </h3>
-            <p className="text-slate-500 text-xs mb-4">
-              Files will be moved to a subfolder inside Church Photo Submissions
+            <p className="text-slate-500 text-xs mb-3">
+              Select an existing folder or type a new one to create it
             </p>
+            {foldersLoading && (
+              <p className="text-slate-400 text-xs mb-3">Loading folders...</p>
+            )}
+            {!foldersLoading && existingFolders.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-1 px-1">
+                {existingFolders.map((folder) => (
+                  <button
+                    key={folder}
+                    onClick={() => setMoveFolder(folder)}
+                    className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      moveFolder === folder
+                        ? 'bg-slate-800 text-white'
+                        : 'border border-slate-200 text-slate-700 active:bg-slate-50'
+                    }`}
+                  >
+                    {folder}
+                  </button>
+                ))}
+              </div>
+            )}
             <input
               type="text"
               value={moveFolder}
