@@ -4,7 +4,7 @@
 
 ## Project Summary
 A PIN-protected web portal for church volunteers to submit photos and videos
-directly to a OneDrive folder. No database. No accounts. No admin dashboard.
+directly to a OneDrive folder. No database. Volunteer uploads use a shared PIN. Admin gallery uses Microsoft OAuth — tpob.org accounts only.
 Built with Next.js 15, TypeScript, Tailwind CSS, deployed on Vercel.
 
 ---
@@ -31,9 +31,16 @@ app/
   page.tsx                  ← PIN entry page (the only route)
   upload/
     page.tsx                ← Upload form (only reachable after correct PIN)
+  admin/
+    page.tsx                ← Admin gallery (requires Microsoft login)
   api/
     upload/
       route.ts              ← Server-side: receives files, calls OneDrive
+    auth/
+      [...nextauth]/
+        route.ts            ← NextAuth.js OAuth handler
+      files/
+        route.ts            ← Fetches file list from OneDrive for admin view
   lib/
     onedrive.ts             ← ALL Microsoft Graph API calls live here only
     auth.ts                 ← PIN verification lives here only
